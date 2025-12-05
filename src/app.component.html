@@ -1,0 +1,547 @@
+
+<div class="flex h-screen w-full antialiased text-slate-800 bg-slate-100">
+  <!-- Sidebar -->
+  <aside class="flex-shrink-0 w-80 bg-white border-r border-slate-200 flex flex-col">
+    <div class="h-16 flex items-center px-4 border-b border-slate-200">
+      <h1 class="text-xl font-bold text-slate-700">Device Manager</h1>
+    </div>
+    <div class="flex-grow p-4 overflow-y-auto">
+      @if (!isWebUsbSupported()) {
+        <div class="p-3 mb-4 text-xs text-amber-800 bg-amber-100 border-l-4 border-amber-500 rounded-r-md">
+          <strong>Unsupported Browser</strong>
+          <p>USB device detection is disabled.</p>
+        </div>
+      }
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Detected Devices</h2>
+      <ul class="space-y-2">
+        @for (device of devices(); track device.id) {
+          <li (click)="selectDevice(device)" [class]="'p-3 rounded-lg flex items-center cursor-pointer transition-all duration-200 ' + (selectedDevice()?.id === device.id ? 'bg-indigo-100 ring-2 ring-indigo-300' : 'hover:bg-slate-100')">
+            <div class="mr-3 text-slate-500" [innerHTML]="getIconForDevice(device.type)"></div>
+            <div class="flex-grow overflow-hidden">
+              <p class="font-semibold text-slate-800 truncate" [title]="device.name">{{ device.name }}</p>
+              <div class="flex items-center gap-2">
+                <span class="text-slate-400" [innerHTML]="getConnectionIcon(device.connectionType)"></span>
+                <p class="text-sm text-slate-500 truncate" [title]="device.manufacturer">{{ device.manufacturer }}</p>
+              </div>
+            </div>
+            <div [class]="'w-3 h-3 rounded-full flex-shrink-0 ' + statusIndicatorClass(device.status)" title="{{ device.status }}"></div>
+          </li>
+        } @empty {
+          <li class="p-3 text-center text-slate-500">No devices found. Scan to begin.</li>
+        }
+      </ul>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col h-screen">
+    <!-- New Header & Toolbar -->
+    <header class="bg-white shadow-sm shrink-0 z-20">
+      <!-- Top Row: Selected Device Info -->
+      <div class="h-16 border-b border-slate-200 flex items-center justify-between px-6">
+        @if (selectedDevice(); as device) {
+          <div class="flex items-center gap-3">
+              <div [class]="'w-4 h-4 rounded-full ' + statusColorClass()"></div>
+              <h2 class="text-lg font-semibold">{{ device.name }}</h2>
+              <span class="text-sm text-slate-500">{{ device.status }}</span>
+          </div>
+        } @else {
+          <h2 class="text-lg font-semibold text-slate-600">No Device Selected</h2>
+        }
+      </div>
+      <!-- Bottom Row: Action Toolbar with Dropdowns -->
+      <nav class="h-16 px-6 flex items-center gap-2 border-b border-slate-200 bg-slate-50/50">
+        <!-- Menu Group 1: Device Discovery -->
+        <div class="relative group">
+          <button class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white rounded-md border border-slate-300 hover:bg-slate-100 transition-colors">
+            <span>Device Discovery</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+          </button>
+          <!-- Dropdown Panel -->
+          <div class="absolute left-0 mt-2 w-56 p-1 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 origin-top-left
+                      invisible opacity-0 scale-95 group-hover:visible group-hover:opacity-100 group-hover:scale-100 
+                      transition-all duration-150 ease-in-out">
+            <button (click)="scanForUsbDevices()" [disabled]="isScanning() || !isWebUsbSupported()" 
+                    class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 rounded-md hover:bg-indigo-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed">
+              @if(isScanning()){ <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> }
+              @else { <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> }
+              <span>Scan USB</span>
+            </button>
+            <button (click)="openDeviceModal()" 
+                    class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 rounded-md hover:bg-indigo-500 hover:text-white">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+              <span>Add by IP</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Menu Group 2: Device Actions -->
+        <div class="relative group">
+          <button [disabled]="!selectedDevice()" class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white rounded-md border border-slate-300 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            <span>Device Actions</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+          </button>
+           <!-- Dropdown Panel -->
+          <div class="absolute left-0 mt-2 w-56 p-1 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 origin-top-left
+                      invisible opacity-0 scale-95 group-hover:visible group-hover:opacity-100 group-hover:scale-100 
+                      transition-all duration-150 ease-in-out">
+            @if(selectedDevice()){
+              <!-- Connect / Disconnect -->
+              @if (selectedDevice()?.connectionType === 'USB') {
+                @if (selectedDevice()?.status !== 'Connected') {
+                  <button (click)="connectDevice(selectedDevice()!.id)" [disabled]="isConnecting()" class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 rounded-md hover:bg-indigo-500 hover:text-white disabled:opacity-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.136A1.76 1.76 0 017.166 11H14.834a1.76 1.76 0 011.732 2.701l-2.147 6.136A1.76 1.76 0 0113 19.24V5.882" /></svg>
+                    <span>Connect</span>
+                  </button>
+                } @else {
+                  <button (click)="disconnectDevice(selectedDevice()!.id)" class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 rounded-md hover:bg-indigo-500 hover:text-white">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                    <span>Disconnect</span>
+                  </button>
+                }
+              }
+
+              <div class="my-1 h-px bg-slate-200"></div>
+
+              <!-- Scan Sub-Menu -->
+              <div class="relative group/sub">
+                <button [disabled]="!isActionable() || (selectedDevice()?.type !== 'Scanner' && selectedDevice()?.type !== '3-in-1')"
+                        class="w-full flex items-center justify-between gap-3 px-3 py-2 text-sm text-slate-700 rounded-md hover:bg-indigo-500 hover:text-white disabled:opacity-50">
+                  <div class="flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 17v-2a2 2 0 012-2h14a2 2 0 012 2v2M3 10V4a2 2 0 012-2h14a2 2 0 012 2v6" /></svg>
+                    <span>Scan</span>
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <!-- Fly-out Panel -->
+                <div class="absolute top-0 right-full mr-1 w-56 p-1 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 origin-top-right
+                            invisible opacity-0 scale-95 group-hover/sub:visible group-hover/sub:opacity-100 group-hover/sub:scale-100 
+                            transition-all duration-150 ease-in-out">
+                  <button (click)="startScan()" class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 rounded-md hover:bg-indigo-500 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                    <span>{{ scannedImageUrl() ? 'Start New Scan' : 'Start Scan' }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Print Sub-Menu -->
+               <div class="relative group/sub">
+                <button [disabled]="!isActionable() || (selectedDevice()?.type !== 'Printer' && selectedDevice()?.type !== '3-in-1')"
+                        class="w-full flex items-center justify-between gap-3 px-3 py-2 text-sm text-slate-700 rounded-md hover:bg-indigo-500 hover:text-white disabled:opacity-50">
+                  <div class="flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m-4 4h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    <span>Print</span>
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <!-- Fly-out Panel -->
+                <div class="absolute top-0 right-full mr-1 w-56 p-1 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 origin-top-right
+                            invisible opacity-0 scale-95 group-hover/sub:visible group-hover/sub:opacity-100 group-hover/sub:scale-100 
+                            transition-all duration-150 ease-in-out">
+                  <button (click)="printTestPage()" class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 rounded-md hover:bg-indigo-500 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    <span>Print Test Page</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="my-1 h-px bg-slate-200"></div>
+
+              <!-- Troubleshoot -->
+              <button (click)="openTroubleshootModal()" class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 rounded-md hover:bg-indigo-500 hover:text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                <span>Troubleshoot</span>
+              </button>
+            }
+          </div>
+        </div>
+
+      </nav>
+    </header>
+
+    <div class="flex-1 p-8 overflow-y-auto">
+      @if (connectionError()) {
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-r-md max-w-4xl mx-auto" role="alert">
+            <p class="font-bold">Connection Error</p>
+            <p>{{ connectionError() }}</p>
+        </div>
+      }
+
+      @if (selectedDevice(); as device) {
+        <div class="bg-white p-6 rounded-lg shadow-sm max-w-4xl mx-auto">
+          <!-- Device Details -->
+          <div class="mb-6">
+             <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-slate-700">Device Details</h3>
+                @if(device.connectionType === 'Network') {
+                  <button (click)="openDeviceModal(device)" class="px-3 py-1 text-sm font-medium text-indigo-700 bg-indigo-100 rounded-md hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Edit</button>
+                }
+             </div>
+             <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                <div class="flex flex-col"><dt class="font-medium text-slate-500">Manufacturer</dt><dd class="text-slate-800 font-semibold">{{ device.manufacturer }}</dd></div>
+                <div class="flex flex-col"><dt class="font-medium text-slate-500">Connection Type</dt><dd class="text-slate-800">{{ device.connectionType }}</dd></div>
+                @if(device.connectionType === 'Network') {
+                  <div class="flex flex-col"><dt class="font-medium text-slate-500">Profile Name</dt><dd class="text-slate-800 font-semibold">{{ device.profile }}</dd></div>
+                  <div class="flex flex-col"><dt class="font-medium text-slate-500">IP Address</dt><dd class="text-slate-800 font-mono">{{ device.ipAddress }}</dd></div>
+                  <div class="flex flex-col"><dt class="font-medium text-slate-500">Port</dt><dd class="text-slate-800 font-mono">{{ device.port }}</dd></div>
+                }
+                @if(device.connectionType === 'USB' && device.rawDevice) {
+                  <div class="flex flex-col"><dt class="font-medium text-slate-500">Vendor ID</dt><dd class="text-slate-800 font-mono">0x{{ device.rawDevice.vendorId.toString(16).padStart(4, '0') }}</dd></div>
+                  <div class="flex flex-col"><dt class="font-medium text-slate-500">Product ID</dt><dd class="text-slate-800 font-mono">0x{{ device.rawDevice.productId.toString(16).padStart(4, '0') }}</dd></div>
+                }
+             </dl>
+          </div>
+          
+          @if(device.type === 'Scanner' || device.type === '3-in-1') {
+             <div class="my-6 border-t border-slate-200"></div>
+             <h3 class="text-lg font-bold text-slate-700 mb-4">Scanner</h3>
+             <div class="p-4 border border-slate-200 rounded-lg">
+                <h4 class="font-semibold mb-2">Scan Settings</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label for="scan-resolution" class="block text-sm font-medium text-gray-700">Resolution (DPI)</label>
+                    <input id="scan-resolution" type="number" min="75" step="25" (input)="scanResolution.set(+$any($event.target).value)" [value]="scanResolution()" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                  </div>
+                  <div>
+                    <label for="scan-color-mode" class="block text-sm font-medium text-gray-700">Color Mode</label>
+                    <select id="scan-color-mode" (change)="scanColorMode.set($any($event.target).value)" [value]="scanColorMode()" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                      <option value="color">Color</option>
+                      <option value="grayscale">Grayscale</option>
+                      <option value="bw">Black & White</option>
+                    </select>
+                  </div>
+                </div>
+                <h4 class="font-semibold mb-2 mt-6">Scan Preview</h4>
+                <input type="file" id="scan-file-input" class="hidden" accept="image/*" (change)="handleFileInput($event)">
+                 <div class="mt-2 p-4 border rounded-lg bg-slate-50 min-h-[300px] flex flex-col items-center justify-center">
+                    @if (scannedImageUrl()) {
+                      <div class="w-full text-center">
+                        <img [src]="scannedImageUrl()" alt="Scanned document" class="w-auto h-auto max-w-full max-h-[60vh] object-contain border rounded-md shadow-md mx-auto" />
+                        <div class="flex justify-center gap-4 mt-4">
+                          <button (click)="saveToHistory()" class="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" /></svg>
+                            <span>Save to History</span>
+                          </button>
+                          <button (click)="downloadScan()" class="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            <span>Download</span>
+                          </button>
+                        </div>
+                      </div>
+                    } @else {
+                      <div class="text-center text-slate-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        <p class="mt-2">Scan results will appear here.</p>
+                         <p class="text-xs">Click "Start Scan" in the header to import an image from your scanner.</p>
+                      </div>
+                    }
+                </div>
+             </div>
+             
+             <!-- Scan History -->
+             <div class="my-6 border-t border-slate-200"></div>
+             <h3 class="text-lg font-bold text-slate-700 mb-4">Scan History</h3>
+             <div class="p-4 border border-slate-200 rounded-lg">
+                @if (scanHistory().length > 0) {
+                    <ul class="space-y-3">
+                        @for (scan of scanHistory(); track scan.id) {
+                            <li class="p-3 flex items-center gap-4 bg-white rounded-md shadow-sm transition-colors hover:bg-slate-50">
+                                <img [src]="scan.imageUrl" class="w-16 h-16 object-cover rounded-md border flex-shrink-0">
+                                <div class="flex-grow min-w-0">
+                                    @if (isRenamingScanId() === scan.id) {
+                                        <div class="flex items-center gap-2">
+                                            <input type="text" [value]="renameScanValue()" (input)="renameScanValue.set($any($event.target).value)" class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" (keydown.enter)="confirmRename(scan.id)" (keydown.escape)="cancelRename()">
+                                            <button (click)="confirmRename(scan.id)" class="p-1 text-green-600 hover:text-green-800"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg></button>
+                                            <button (click)="cancelRename()" class="p-1 text-red-600 hover:text-red-800"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.697a1 1 0 010-1.414z" clip-rule="evenodd" /></svg></button>
+                                        </div>
+                                    } @else {
+                                        <p class="font-semibold text-slate-800 truncate">{{ scan.name }}</p>
+                                    }
+                                    <p class="text-xs text-slate-500">{{ scan.date | date:'short' }}</p>
+                                </div>
+                                <div class="flex items-center gap-1 flex-shrink-0">
+                                     @if (isRenamingScanId() !== scan.id) {
+                                        <button (click)="viewScan(scan)" title="View" class="p-2 text-slate-500 rounded-full hover:bg-slate-200 hover:text-slate-700"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" /></svg></button>
+                                        <button (click)="startRename(scan)" title="Rename" class="p-2 text-slate-500 rounded-full hover:bg-slate-200 hover:text-slate-700"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg></button>
+                                        <button (click)="openAiAnalysisModal(scan)" title="Analyze with AI" class="p-2 text-slate-500 rounded-full hover:bg-slate-200 hover:text-indigo-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg></button>
+                                     }
+                                     <button (click)="deleteScan(scan.id)" title="Delete" class="p-2 text-red-400 rounded-full hover:bg-red-100 hover:text-red-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                } @else {
+                    <p class="text-center text-slate-500 py-4">No saved scans.</p>
+                }
+             </div>
+
+             <!-- Extracted Document Data -->
+             <div class="my-6 border-t border-slate-200"></div>
+             <h3 class="text-lg font-bold text-slate-700 mb-4">Extracted Document Data</h3>
+             <div class="p-4 border border-slate-200 rounded-lg">
+                <div class="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                    <h4 class="font-semibold text-indigo-800 mb-2">Process Scanned Form</h4>
+                    <p class="text-sm text-indigo-700 mb-3">Scan one of the required forms, then click the button below to use AI to extract its contents into the table.</p>
+                    <button (click)="extractAndStoreData()" [disabled]="isExtracting() || !scannedImageUrl()"
+                            class="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-indigo-300 disabled:cursor-not-allowed">
+                        @if (isExtracting()) {
+                            <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            <span>Extracting Data...</span>
+                        } @else {
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            <span>Extract Data from Preview</span>
+                        }
+                    </button>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 justify-between items-center mb-3">
+                    <input type="text" placeholder="Filter data..." (input)="dataFilter.set($any($event.target).value)"
+                           class="w-full sm:w-auto block border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <button (click)="exportToCsv()"
+                            class="w-full sm:w-auto flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white rounded-md border border-slate-300 hover:bg-slate-100 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        <span>Export to CSV</span>
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto border rounded-lg">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">نام مشترک</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">شماره اشتراک</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">کد ملی</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">تاریخ درخواست</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">شماره پروژه</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">تاریخ اسکن</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            @for (item of filteredData(); track item.id) {
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.subscriberName }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500 font-mono">{{ item.subscriptionNumber }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500 font-mono">{{ item.nationalId }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500 font-mono">{{ item.requestDate }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500 font-mono">{{ item.projectNumber }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ item.scanDate | date:'short' }}</td>
+                                </tr>
+                            } @empty {
+                                <tr>
+                                    <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">No data extracted yet.</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+             </div>
+
+          }
+        </div>
+      } @else {
+        <div class="text-center py-20">
+          <svg class="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+          </svg>
+          <h3 class="mt-2 text-sm font-medium text-slate-900">Select a device</h3>
+          <p class="mt-1 text-sm text-slate-500">Choose a device from the list on the left to see its details and actions.</p>
+        </div>
+      }
+    </div>
+  </main>
+</div>
+
+
+<!-- Modals -->
+
+<!-- Add/Edit Device Modal -->
+@if (isDeviceModalOpen()) {
+  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md transform transition-all">
+      <div class="p-6">
+        <h3 class="text-lg font-medium leading-6 text-gray-900">{{ editingDevice() ? 'Edit Network Device' : 'Add Network Device' }}</h3>
+        <div class="mt-4 space-y-4">
+          <div>
+            <label for="ip_name" class="block text-sm font-medium text-gray-700">Device Name</label>
+            <input type="text" name="ip_name" id="ip_name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g., HP LaserJet Pro" [value]="addByIpName()" (input)="addByIpName.set($event.target.value)">
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+               <label for="ip_address" class="block text-sm font-medium text-gray-700">IP Address</label>
+               <input type="text" name="ip_address" id="ip_address" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono" placeholder="192.168.1.150" [value]="addByIpAddress()" (input)="addByIpAddress.set($event.target.value)">
+            </div>
+             <div>
+               <label for="ip_port" class="block text-sm font-medium text-gray-700">Port</label>
+               <input type="number" name="ip_port" id="ip_port" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono" placeholder="9100" [value]="addByIpPort()" (input)="addByIpPort.set($event.target.value)">
+            </div>
+          </div>
+          <div>
+            <label for="ip_profile" class="block text-sm font-medium text-gray-700">Profile Name</label>
+            <input type="text" name="ip_profile" id="ip_profile" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g., Office Printer" [value]="addByIpProfile()" (input)="addByIpProfile.set($event.target.value)">
+          </div>
+           @if(addByIpError()) {
+            <p class="mt-2 text-sm text-red-600">{{ addByIpError() }}</p>
+           }
+        </div>
+      </div>
+      <div class="bg-gray-50 px-6 py-3 flex flex-row-reverse gap-3">
+        <button type="button" (click)="confirmSaveDevice()" [disabled]="isSavingDevice()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 sm:w-auto sm:text-sm disabled:bg-indigo-300">
+           @if(isSavingDevice()) {
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <span>{{ editingDevice() ? 'Saving...' : 'Adding...' }}</span>
+           } @else {
+            <span>{{ editingDevice() ? 'Save Changes' : 'Add Device' }}</span>
+           }
+        </button>
+        <button type="button" (click)="closeDeviceModal()" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Troubleshoot Modal -->
+@if (isTroubleshootModalOpen()) {
+  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl transform transition-all max-h-[90vh] flex flex-col">
+      <div class="p-6 border-b">
+        <h3 class="text-lg font-medium leading-6 text-gray-900">AI Troubleshooter for {{ selectedDevice()?.name }}</h3>
+      </div>
+      <div class="p-6 space-y-4 overflow-y-auto">
+        <div>
+          <label for="issue" class="block text-sm font-medium text-gray-700">Select your issue:</label>
+          <select id="issue" name="issue" (change)="onIssueChange($event)" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+            <option value="paper_jam" [selected]="selectedIssue() === 'paper_jam'">Paper Jam</option>
+            <option value="wont_connect" [selected]="selectedIssue() === 'wont_connect'">Won't Connect</option>
+            <option value="poor_quality" [selected]="selectedIssue() === 'poor_quality'">Poor Quality</option>
+            <option value="offline" [selected]="selectedIssue() === 'offline'">Device is Offline</option>
+          </select>
+        </div>
+        <button (click)="getTroubleshootingSteps()" [disabled]="isTroubleshooting()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 disabled:bg-indigo-400">
+          @if(isTroubleshooting()) {
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <span>Thinking...</span>
+          } @else {
+            <span>Get Help</span>
+          }
+        </button>
+
+        @if (troubleshootingSteps().length > 0) {
+          <div class="mt-4 p-4 bg-gray-50 rounded-lg border">
+            <h4 class="font-semibold text-gray-800 mb-3">AI Suggestions:</h4>
+            <ul class="space-y-3">
+              @for(step of troubleshootingSteps(); track step.title) {
+                <li (click)="toggleStepCompletion(step)" class="flex items-start gap-3 cursor-pointer p-2 rounded-md hover:bg-gray-100">
+                   <div class="flex-shrink-0 w-6 h-6 flex items-center justify-center border-2 rounded-md transition-colors" [class]="step.completed() ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'">
+                     @if(step.completed()) {
+                       <svg class="w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
+                     }
+                   </div>
+                   <div class="flex-grow">
+                     <p class="font-semibold text-gray-800" [class.line-through]="step.completed()">{{step.title}}</p>
+                     <ul class="list-disc pl-5 mt-1 space-y-1 text-sm text-gray-600">
+                        @for(detail of step.details; track detail) {
+                           <li [class.line-through]="step.completed()">{{detail}}</li>
+                        }
+                     </ul>
+                   </div>
+                </li>
+              }
+            </ul>
+            
+            <div class="mt-6 border-t pt-4">
+              @if(issueResolutionFeedback() === null) {
+                <p class="text-sm font-medium text-center text-gray-700 mb-3">Was your issue resolved?</p>
+                <div class="flex justify-center gap-4">
+                   <button (click)="submitFeedback(true)" class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700">Yes</button>
+                   <button (click)="submitFeedback(false)" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-600">No</button>
+                </div>
+              } @else {
+                <p class="text-center text-sm font-medium text-green-700">Thank you for your feedback!</p>
+              }
+            </div>
+          </div>
+        }
+      </div>
+      <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse border-t">
+        <button type="button" (click)="closeTroubleshootModal()" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- AI Analysis Modal -->
+@if (isAiModalOpen() && analyzingScan(); as scan) {
+  <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div class="p-5 border-b flex justify-between items-center flex-shrink-0">
+        <h3 class="text-lg font-medium text-gray-900">AI Analysis for <span class="font-bold">{{ scan.name }}</span></h3>
+        <button (click)="closeAiAnalysisModal()" class="p-1 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <div class="p-6 flex-grow overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Left Column: Image and Prompt -->
+        <div class="flex flex-col justify-between h-full">
+          <!-- Top part: Image and custom prompt textarea -->
+          <div>
+            <div class="flex-shrink-0">
+              <img [src]="scan.imageUrl" alt="Scan preview" class="w-full h-auto max-h-64 object-contain border rounded-md">
+            </div>
+            <div class="flex-grow flex flex-col mt-4">
+              <label for="ai-prompt" class="block text-sm font-medium text-gray-700 mb-1">Your custom question for the AI:</label>
+              <textarea id="ai-prompt" rows="3" class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" [value]="aiAnalysisPrompt()" (input)="aiAnalysisPrompt.set($any($event).target.value)"></textarea>
+            </div>
+          </div>
+        
+          <!-- Bottom part: Action buttons -->
+          <div class="space-y-4 mt-4">
+            <!-- Quick Action -->
+            <div class="border-t pt-4">
+               <button (click)="quickActionExtractText()" [disabled]="isAnalyzing()" class="w-full flex items-center justify-center gap-2 rounded-md border border-indigo-600 shadow-sm px-4 py-2 bg-indigo-50 text-base font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7" /></svg>
+                  <span>Extract Text (Quick Action)</span>
+               </button>
+            </div>
+            
+            <!-- Custom Prompt Action -->
+            <button (click)="performAiAnalysis()" [disabled]="isAnalyzing() || !aiAnalysisPrompt()" class="w-full flex items-center justify-center gap-2 rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 disabled:bg-indigo-400">
+               @if(isAnalyzing()) {
+                 <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                 <span>Analyzing...</span>
+               } @else {
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+                 <span>Run Custom Analysis</span>
+               }
+             </button>
+          </div>
+        </div>
+
+        <!-- Right Column: Result -->
+        <div class="bg-slate-50 border rounded-md p-4 flex flex-col">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">AI Response:</h4>
+            @if (isAnalyzing()) {
+                 <div class="flex-grow flex items-center justify-center text-gray-500">
+                    <svg class="animate-spin h-8 w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                 </div>
+            } @else if(aiAnalysisResult()) {
+                 <div class="prose prose-sm max-w-none whitespace-pre-wrap flex-grow overflow-y-auto">{{ aiAnalysisResult() }}</div>
+            } @else {
+                <div class="flex-grow flex items-center justify-center text-center text-gray-500">
+                    <p>The AI's response will appear here.</p>
+                </div>
+            }
+        </div>
+      </div>
+      <div class="bg-gray-50 px-6 py-3 flex flex-row-reverse border-t flex-shrink-0">
+        <button type="button" (click)="closeAiAnalysisModal()" class="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+}

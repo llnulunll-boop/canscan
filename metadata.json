@@ -1,0 +1,14 @@
+{
+  "name": "CanScan",
+  "description": "A user interface to detect, connect to, and manage real USB-connected devices like printers and scanners using the WebUSB API. Includes AI-powered troubleshooting to help resolve common device issues.",
+  "requestFramePermissions": [
+    "usb",
+    "bluetooth",
+    "camera",
+    "clipboard-read",
+    "display-capture",
+    "geolocation",
+    "microphone",
+    "serial"
+  ]
+}
