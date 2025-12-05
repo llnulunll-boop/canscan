@@ -3,7 +3,7 @@ import { Component, ChangeDetectionStrategy, signal, computed, inject, WritableS
 import { CommonModule, DatePipe } from '@angular/common';
 import { Device, DeviceStatus, ConnectionType } from './models/device.model';
 import { DeviceService, NetworkDevicePayload } from './services/device.service';
-import { GeminiService, ExtractedDocumentData } from './services/gemini.service';
+import { GeminiService, ExtractedDocumentData, ChatMessage } from './services/gemini.service';
 
 export interface TroubleshootStep {
   title: string;
@@ -77,6 +77,21 @@ export class AppComponent {
   structuredData = signal<ExtractedDocumentData[]>([]);
   isExtracting = signal(false);
   dataFilter = signal('');
+
+  // Chatbot State
+  isChatbotOpen = signal(false);
+  chatHistory: WritableSignal<ChatMessage[]> = signal([]);
+  isChatbotThinking = signal(false);
+  currentChatMessage = signal('');
+
+  // Image Generation State
+  isImageGenerationModalOpen = signal(false);
+  imageGenPrompt = signal('A high-resolution, photorealistic image of a sleek, modern scanner on a clean, minimalist desk.');
+  imageGenAspectRatio = signal('16:9');
+  isGeneratingImage = signal(false);
+  generatedImageUrl = signal('');
+  imageGenError = signal('');
+  aspectRatios = signal(['1:1', '3:4', '4:3', '9:16', '16:9']);
 
   filteredData = computed(() => {
     const filter = this.dataFilter().toLowerCase().trim();
@@ -478,6 +493,92 @@ export class AppComponent {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  // Chatbot Methods
+  toggleChatbot() {
+    this.isChatbotOpen.update(v => !v);
+    if (this.isChatbotOpen()) {
+      this.geminiService.startChat();
+      if (this.chatHistory().length === 0) {
+        this.chatHistory.set([{ role: 'model', text: 'Hello! How can I help you with your devices today?' }]);
+      }
+    }
+  }
+
+  async sendChatMessage() {
+    const message = this.currentChatMessage().trim();
+    if (!message || this.isChatbotThinking()) return;
+
+    this.chatHistory.update(h => [...h, { role: 'user', text: message }]);
+    this.currentChatMessage.set('');
+    this.isChatbotThinking.set(true);
+
+    this.chatHistory.update(h => [...h, { role: 'model', text: '' }]);
+    
+    try {
+      const stream = this.geminiService.sendMessageStream(message);
+      for await (const chunk of stream) {
+        this.chatHistory.update(h => {
+          const lastMessage = h[h.length - 1];
+          if (lastMessage && lastMessage.role === 'model') {
+            lastMessage.text += chunk;
+          }
+          return [...h];
+        });
+      }
+    } catch (e) {
+       this.chatHistory.update(h => {
+          const lastMessage = h[h.length - 1];
+          if (lastMessage && lastMessage.role === 'model') {
+            lastMessage.text = 'Sorry, an error occurred. Please try again.';
+          }
+          return [...h];
+        });
+    } finally {
+      this.isChatbotThinking.set(false);
+    }
+  }
+
+  // Image Generation Methods
+  openImageGenerationModal() {
+    this.generatedImageUrl.set('');
+    this.imageGenError.set('');
+    this.isImageGenerationModalOpen.set(true);
+  }
+
+  closeImageGenerationModal() {
+    this.isImageGenerationModalOpen.set(false);
+  }
+  
+  async generateImage() {
+    const prompt = this.imageGenPrompt();
+    if (!prompt) return;
+
+    this.isGeneratingImage.set(true);
+    this.generatedImageUrl.set('');
+    this.imageGenError.set('');
+
+    try {
+      const imageBytes = await this.geminiService.generateImage(prompt, this.imageGenAspectRatio());
+      this.generatedImageUrl.set(`data:image/jpeg;base64,${imageBytes}`);
+    } catch (error) {
+      console.error("Image generation failed:", error);
+      this.imageGenError.set(error instanceof Error ? error.message : "An unknown error occurred during image generation.");
+    } finally {
+      this.isGeneratingImage.set(false);
+    }
+  }
+  
+  downloadGeneratedImage() {
+    const url = this.generatedImageUrl();
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `generated-image-${new Date().getTime()}.jpeg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
 
